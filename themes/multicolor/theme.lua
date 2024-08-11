@@ -7,6 +7,8 @@
 
 local gears = require("gears")
 local lain  = require("lain")
+local helpers  = require("lain.helpers")
+local json     = require("lain.util").dkjson
 local awful = require("awful")
 local wibox = require("wibox")
 local dpi   = require("beautiful.xresources").apply_dpi
@@ -14,10 +16,32 @@ local dpi   = require("beautiful.xresources").apply_dpi
 local os = os
 local my_table = awful.util.table or gears.table -- 4.{0,1} compatibility
 
+local function scandir(directory, filter)
+    local i, t, popen = 0, {}, io.popen
+    if not filter then
+        filter = function(s) return true end
+    end
+    print(filter)
+    for filename in popen('ls -a "'..directory..'"'):lines() do
+        if filter(filename) then
+            i = i + 1
+            t[i] = filename
+        end
+    end
+    return t
+end
+
+local wps_path = os.getenv("HOME") .. "/media/pictures/wallpapers/"
+local wp_filter = function(s) return string.match(s,"%.png$") or string.match(s,"%.jpg$") end
+local wp_files = scandir(wps_path, wp_filter)
+math.randomseed(os.time())
+local wp_index = math.random(1, #wp_files)
+local wp_path = wps_path .. wp_files[wp_index]
+
 local theme                                     = {}
 theme.confdir                                   = os.getenv("HOME") .. "/.config/awesome/themes/multicolor"
-theme.wallpaper                                 = theme.confdir .. "/wall.png"
-theme.font                                      = "Terminus 8"
+theme.wallpaper = wp_path or theme.confdir .. "/wall.png"
+theme.font                                      = "Terminus Bold 10"
 theme.menu_bg_normal                            = "#000000"
 theme.menu_bg_focus                             = "#000000"
 theme.bg_normal                                 = "#000000"
@@ -28,8 +52,8 @@ theme.fg_focus                                  = "#ff8c00"
 theme.fg_urgent                                 = "#af1d18"
 theme.fg_minimize                               = "#ffffff"
 theme.border_width                              = dpi(1)
-theme.border_normal                             = "#1c2022"
-theme.border_focus                              = "#606060"
+theme.border_normal                             = "#101010"
+theme.border_focus                              = "#99a600"
 theme.border_marked                             = "#3ca4d8"
 theme.menu_border_width                         = 0
 theme.menu_width                                = dpi(130)
@@ -56,7 +80,7 @@ theme.taglist_squares_sel                       = theme.confdir .. "/icons/squar
 theme.taglist_squares_unsel                     = theme.confdir .. "/icons/square_b.png"
 theme.tasklist_plain_task_name                  = true
 theme.tasklist_disable_icon                     = true
-theme.useless_gap                               = 0
+theme.useless_gap                               = 3
 theme.layout_tile                               = theme.confdir .. "/icons/tile.png"
 theme.layout_tilegaps                           = theme.confdir .. "/icons/tilegaps.png"
 theme.layout_tileleft                           = theme.confdir .. "/icons/tileleft.png"
@@ -96,7 +120,7 @@ local markup = lain.util.markup
 -- Textclock
 os.setlocale(os.getenv("LANG")) -- to localize the clock
 local clockicon = wibox.widget.imagebox(theme.widget_clock)
-local mytextclock = wibox.widget.textclock(markup("#7788af", "%A %d %B ") .. markup("#ab7367", ">") .. markup("#de5e1e", " %H:%M "))
+local mytextclock = wibox.widget.textclock(markup("#7788af", "%F %b %a ") .. markup("#ab7367", ">") .. markup("#de5e1e", " %H:%M "))
 mytextclock.font = theme.font
 
 -- Calendar
@@ -108,24 +132,89 @@ theme.cal = lain.widget.cal({
         bg   = theme.bg_normal
     }
 })
-
 -- Weather
---[[ to be set before use
+-- function print_r(t, fd)
+--     fd = fd or io.stdout
+--     local function print(str)
+--         str = str or ""
+--         fd:write(str .. "\n")
+--     end
+--     local print_r_cache = {}
+--     local function sub_print_r(t, indent)
+--         if (print_r_cache[tostring(t)]) then
+--             print(indent .. "*" .. tostring(t))
+--         else
+--             print_r_cache[tostring(t)] = true
+--             if (type(t) == "table") then
+--                 for pos, val in pairs(t) do
+--                     if (type(val) == "table") then
+--                         print(indent .. "[" .. pos .. "] => " .. tostring(t) .. " {")
+--                         sub_print_r(val, indent .. string.rep(" ", string.len(pos) + 8))
+--                         print(indent .. string.rep(" ", string.len(pos) + 6) .. "}")
+--                     elseif (type(val) == "string") then
+--                         print(indent .. "[" .. pos .. '] => "' .. val .. '"')
+--                     else
+--                         print(indent .. "[" .. pos .. "] => " .. tostring(val))
+--                     end
+--                 end
+--             else
+--                 print(indent .. tostring(t))
+--             end
+--         end
+--     end
+--     if (type(t) == "table") then
+--         print(tostring(t) .. " {")
+--         sub_print_r(t, "  ")
+--         print("}")
+--     else
+--         sub_print_r(t, "  ")
+--     end
+--     print()
+-- end
+
+function split(inputstr, sep)
+    if sep == nil then
+        sep = "%s"
+    end
+    local t = {}
+    for str in string.gmatch(inputstr, "([^" .. sep .. "]+)") do
+        table.insert(t, str)
+    end
+    return t
+end
+
+(function()
+    local coords_cmd = "curl -s https://ipinfo.io/loc"
+    helpers.async(coords_cmd, function(f)
+        local err
+        local coords = split(f, ",")
+        lat = tonumber(coords[1])
+        lon = tonumber(coords[2])
+    end)
+end)()
+
 local weathericon = wibox.widget.imagebox(theme.widget_weather)
 theme.weather = lain.widget.weather({
-    city_id = 2643743, -- placeholder (London)
-    notification_preset = { font = "Terminus 10", fg = theme.fg_normal },
+    APPID   = "dc7b6a66c3d9b3d902489a250eef3148",
+    timeout = 180,
+    lat = lat or 29.290810, -- Khaitan, KW
+    lon = lon or 47.976540, -- Khaitan, KW
+    units   = "metric",
+    lang    = "en",
+    notification_preset = { font = "Terminus 12", fg = theme.fg_normal },
     weather_na_markup = markup.fontfg(theme.font, "#eca4c4", "N/A "),
     settings = function()
-        descr = weather_now["weather"][1]["description"]:lower()
+        file = io.open("/home/mohannad/weather", "a")
+        descr = weather_now["weather"][1]["description"]--:lower()
+        --country_id = weather_now["sys"]["id"]
+        city = weather_now["name"]--:lower()
         units = math.floor(weather_now["main"]["temp"])
-        widget:set_markup(markup.fontfg(theme.font, "#eca4c4", descr .. " @ " .. units .. "°C "))
+        widget:set_markup(markup.fontfg(theme.font, "#eca4c4", city .. ": " .. descr .. " @ " .. units .. "°C "))
     end
 })
---]]
 
 -- / fs
---[[ commented because it needs Gio/Glib >= 2.54
+---[[ commented because it needs Gio/Glib >= 2.54
 local fsicon = wibox.widget.imagebox(theme.widget_fs)
 theme.fs = lain.widget.fs({
     notification_preset = { font = "Terminus 10", fg = theme.fg_normal },
@@ -133,7 +222,7 @@ theme.fs = lain.widget.fs({
         widget:set_markup(markup.fontfg(theme.font, "#80d9d8", string.format("%.1f", fs_now["/"].percentage) .. "% "))
     end
 })
---]]
+---]]
 
 -- Mail IMAP check
 --[[ to be set before use
@@ -206,13 +295,13 @@ local netdowninfo = wibox.widget.textbox()
 local netupicon = wibox.widget.imagebox(theme.widget_netup)
 local netupinfo = lain.widget.net({
     settings = function()
-        --[[ uncomment if using the weather widget
+        ---[[ uncomment if using the weather widget
         if iface ~= "network off" and
            string.match(theme.weather.widget.text, "N/A")
         then
             theme.weather.update()
         end
-        --]]
+        ---]]
 
         widget:set_markup(markup.fontfg(theme.font, "#e54c62", net_now.sent .. " "))
         netdowninfo:set_markup(markup.fontfg(theme.font, "#87af5f", net_now.received .. " "))
@@ -265,6 +354,7 @@ function theme.at_screen_connect(s)
         wallpaper = wallpaper(s)
     end
     gears.wallpaper.maximized(wallpaper, s, true)
+    awful.spawn.with_shell(string.format("wal --cols16 -n -i \"%s\"", wallpaper))
 
     -- Tags
     awful.tag(awful.util.tagnames, s, awful.layout.layouts[1])
@@ -287,7 +377,7 @@ function theme.at_screen_connect(s)
     s.mytasklist = awful.widget.tasklist(s, awful.widget.tasklist.filter.currenttags, awful.util.tasklist_buttons)
 
     -- Create the wibox
-    s.mywibox = awful.wibar({ position = "top", screen = s, height = dpi(19), bg = theme.bg_normal, fg = theme.fg_normal })
+    s.mywibox = awful.wibar({ position = "top", screen = s, height = dpi(20), bg = theme.bg_normal, fg = theme.fg_normal })
 
     -- Add widgets to the wibox
     s.mywibox:setup {
@@ -317,10 +407,10 @@ function theme.at_screen_connect(s)
             memory.widget,
             cpuicon,
             cpu.widget,
-            --fsicon,
-            --theme.fs.widget,
-            --weathericon,
-            --theme.weather.widget,
+            fsicon,
+            theme.fs.widget,
+            weathericon,
+            theme.weather.widget,
             tempicon,
             temp.widget,
             baticon,
